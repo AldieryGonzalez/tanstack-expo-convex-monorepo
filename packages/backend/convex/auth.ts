@@ -1,9 +1,7 @@
 import { expo } from "@better-auth/expo";
 import { createClient } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
-import {
-	type GenericCtx,
-} from "@convex-dev/better-auth/utils";
+import type { GenericCtx } from "@convex-dev/better-auth/utils";
 import { betterAuth } from "better-auth/minimal";
 import { anonymous, magicLink, twoFactor } from "better-auth/plugins";
 import { components } from "./_generated/api";
@@ -12,7 +10,8 @@ import { type QueryCtx, query } from "./_generated/server";
 import authConfig from "./auth.config";
 
 const betterAuthSecret = process.env.BETTER_AUTH_SECRET as string;
-const baseSiteUrl = process.env.SITE_URL as string;
+const baseSiteUrl =
+	(process.env.SITE_URL as string) || (process.env.CONVEX_SITE_URL as string);
 const siteUrl =
 	!baseSiteUrl.startsWith("http://") && !baseSiteUrl.startsWith("https://")
 		? `http://${baseSiteUrl}`
@@ -32,11 +31,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
 			// "https://yourdomain.com",
 			// "myapp://",
 			...(process.env.NODE_ENV === "development"
-				? [
-						"exp://",
-						"exp://**",
-						"exp://192.168.*.*:*/**",
-					]
+				? ["exp://", "exp://**", "exp://192.168.*.*:*/**"]
 				: []),
 		],
 
