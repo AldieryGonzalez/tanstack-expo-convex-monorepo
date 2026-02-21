@@ -13,6 +13,10 @@
 	"scripts": {
 		"build": "turbo run build",
 		"dev": "turbo run dev",
+		"dev:backend": "turbo run dev --filter=@monorepo/backend",
+		"dev:mobile": "turbo run dev --filter=@monorepo/mobile",
+		"dev:web": "turbo run dev --filter=@monorepo/web",
+		"dev:tunnel": "turbo run dev --filter=@monorepo/dev-tunnel",
 		"format-and-lint": "biome check .",
 		"format-and-lint:fix": "biome check . --write",
 		"check-types": "turbo run check-types"

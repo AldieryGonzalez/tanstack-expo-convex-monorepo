@@ -13,23 +13,28 @@ A full-stack monorepo template with a **web app** (TanStack Start) and **mobile 
 
 ## Project Structure
 
-```
+```text
 ├── apps/
-│   ├── web/          # TanStack Start web application
-│   └── mobile/       # Expo React Native mobile app
+│   ├── web/                    # TanStack Start web application
+│   └── mobile/                 # Expo React Native app
 ├── packages/
-│   ├── backend/      # Convex backend (shared between web & mobile)
-│   └── typescript-config/  # Shared TypeScript configs
-├── turbo.json        # Turborepo task configuration
-├── biome.json        # Biome linter/formatter config
-└── package.json      # Root workspace config
+│   ├── backend/                # Convex backend shared by web + mobile
+│   ├── dev-tunnel/             # Optional Cloudflare tunnel runner for local OAuth
+│   └── typescript-config/      # Shared TypeScript configs
+├── docs/
+│   ├── AUTH_PORTING_NOTES.md
+│   └── LOCAL_DEV_CONVEX_CLOUDFLARE.md
+├── turbo.json
+├── biome.json
+└── package.json
 ```
 
 ## Prerequisites
 
 - [Bun](https://bun.sh/) (v1.3.6+)
-- A [Convex](https://convex.dev/) account (free tier available)
+- A [Convex](https://convex.dev/) account
 - (Optional) [Google Cloud Console](https://console.cloud.google.com/) project for Google OAuth
+- (Optional, for real-device mobile OAuth on local backend) [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
 
 ## Getting Started
 
@@ -39,112 +44,176 @@ A full-stack monorepo template with a **web app** (TanStack Start) and **mobile 
 bun install
 ```
 
-### 2. Set up Convex
-
-Initialize your Convex project from the backend package:
+### 2. Initialize Convex
 
 ```bash
 cd packages/backend
 npx convex dev
 ```
 
-This will prompt you to log in to Convex and create a new project. It will generate your deployment URL.
+This links your local workspace to a Convex deployment and writes `CONVEX_DEPLOYMENT`.
 
-### 3. Configure environment variables
+### 3. Choose deployment mode and set env vars
 
-#### Web app (`apps/web/.env`)
+#### Cloud Convex deployment (recommended for staging/prod)
+
+Use your cloud URLs:
+
+- `*.convex.cloud` for API
+- `*.convex.site` for Better Auth site URL
+
+`apps/web/.env`:
 
 ```env
 VITE_CONVEX_URL=https://your-deployment.convex.cloud
 VITE_CONVEX_SITE_URL=https://your-deployment.convex.site
 ```
 
-#### Mobile app (`apps/mobile/.env`)
+`apps/mobile/.env`:
 
 ```env
 EXPO_PUBLIC_CONVEX_URL=https://your-deployment.convex.cloud
 EXPO_PUBLIC_CONVEX_SITE_URL=https://your-deployment.convex.site
 ```
 
-#### Convex backend environment variables
-
-Set these in the [Convex dashboard](https://dashboard.convex.dev/) under your project's Settings > Environment Variables:
+Convex runtime env (Dashboard -> Settings -> Environment Variables):
 
 ```env
 BETTER_AUTH_SECRET=your-random-secret-string
-SITE_URL=http://localhost:3000
-
-# Google OAuth (optional — remove from auth.ts if not needed)
+SITE_URL=https://your-deployment.convex.site
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
+# Optional
+TRUSTED_ORIGINS=https://your-web-domain.com,https://staging.your-web-domain.com
+MOBILE_APP_SCHEME=myapp
 ```
 
-To generate a `BETTER_AUTH_SECRET`:
+#### Local Convex deployment
 
-```bash
-openssl rand -base64 32
+For simulator/emulator and local web, direct local URLs work:
+
+`apps/web/.env.local`:
+
+```env
+VITE_CONVEX_URL=http://127.0.0.1:3210
+VITE_CONVEX_SITE_URL=http://127.0.0.1:3211
 ```
+
+`apps/mobile/.env.local`:
+
+```env
+EXPO_PUBLIC_CONVEX_URL=http://127.0.0.1:3210
+EXPO_PUBLIC_CONVEX_SITE_URL=http://127.0.0.1:3211
+```
+
+For **real-device mobile Google OAuth** against local Convex, use a tunnel and HTTPS hostnames. See:
+
+- `docs/LOCAL_DEV_CONVEX_CLOUDFLARE.md`
 
 ### 4. Run the dev servers
-
-From the root directory, start all apps:
 
 ```bash
 bun dev
 ```
 
-This starts:
-- **Web app** at `http://localhost:3000`
-- **Convex** backend in dev mode
+This starts web, mobile, backend, and the optional tunnel task.
 
-To run the mobile app separately:
+Tunnel task behavior:
+
+- disabled by default
+- set `CLOUDFLARE_TUNNEL_ENABLED=1` to run it from `bun dev`
+
+Example:
 
 ```bash
-cd apps/mobile
-bun run dev
+CLOUDFLARE_TUNNEL_ENABLED=1 \
+CLOUDFLARE_TUNNEL_NAME=monorepo-local \
+CLOUDFLARE_AUTH_HOST=auth-local.your-domain.com \
+CLOUDFLARE_API_HOST=api-local.your-domain.com \
+CLOUDFLARE_WEB_HOST=web-local.your-domain.com \
+bun dev
+```
+
+Generate `BETTER_AUTH_SECRET` with:
+
+```bash
+openssl rand -base64 32
 ```
 
 ## Auth Setup
 
-Authentication is pre-configured with [Better Auth](https://better-auth.com/) integrated into Convex. The following auth methods are available:
+Authentication is pre-configured with Better Auth + Convex.
 
-- **Anonymous** — auto-create anonymous sessions
-- **Google OAuth** — requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
-- **Magic Link** — requires you to plug in an email service (see `packages/backend/convex/auth.ts`)
-- **Two-Factor (2FA)** — TOTP-based second factor
+Enabled methods:
 
-The auth plumbing is wired up in:
+- **Anonymous**
+- **Google OAuth**
+- **Magic Link** (email provider required)
+- **Two-Factor (2FA)**
+
+### Auth checklist
+
+1. Ensure Convex runtime `SITE_URL` matches your auth host.
+2. Configure Google callback URI as:
+   - `https://<your-auth-host>/api/auth/callback/google`
+3. For web social sign-in, pass an absolute callback URL on the web origin.
+4. Set optional `TRUSTED_ORIGINS` for additional browser origins.
+5. For mobile production deep links, set `MOBILE_APP_SCHEME` (defaults to `myapp`).
+
+### Test Google OAuth in both apps
+
+After `bun dev`:
+
+1. Open web on `http://localhost:3000` and click **Sign in with Google** on the home screen.
+2. Open mobile (Expo) and click **Sign in with Google** on the home screen.
+3. Confirm each app shows `Signed in as ...` after callback.
+4. Click **Sign out** in each app and confirm state returns to `Not signed in`.
+
+### Auth plumbing
 
 | File | Purpose |
 |------|---------|
-| `packages/backend/convex/auth.ts` | Server-side auth config & user helpers |
-| `packages/backend/convex/auth.config.ts` | Convex auth config provider |
-| `packages/backend/convex/http.ts` | Auth HTTP routes |
-| `apps/web/src/lib/auth-client.ts` | Web auth client |
-| `apps/web/src/lib/auth-server.ts` | Web server-side auth (SSR) |
+| `packages/backend/convex/auth.ts` | Better Auth server config, trusted origins, cross-domain plugin |
+| `packages/backend/convex/http.ts` | Auth HTTP routes with CORS enabled |
+| `apps/web/src/lib/auth-client.ts` | Web auth client with cross-domain client plugin |
+| `apps/web/src/lib/auth-server.ts` | Web SSR auth integration |
 | `apps/web/src/routes/api/auth/$.ts` | Web auth API route handler |
-| `apps/mobile/lib/auth-client.ts` | Mobile auth client (with SecureStore) |
+| `apps/mobile/lib/convex-urls.ts` | Mobile Convex API/site URL resolver |
+| `apps/mobile/lib/auth-client.ts` | Mobile auth client setup |
+| `packages/backend/scripts/dev.sh` | Syncs Convex `SITE_URL` before `convex dev` |
 
-### Magic Link Email
+### Magic Link email
 
-The magic link plugin is configured but needs an email service. In `packages/backend/convex/auth.ts`, replace the `console.log` in `sendMagicLink` with your email provider (e.g. [Resend](https://resend.com/), [SendGrid](https://sendgrid.com/)).
+In `packages/backend/convex/auth.ts`, replace the `console.log` in `sendMagicLink` with your email provider integration.
 
 ## Scripts
 
 | Command | Description |
 |---------|-------------|
-| `bun dev` | Start all apps in development mode |
+| `bun dev` | Start all dev tasks |
+| `bun run dev:web` | Start only the web app |
+| `bun run dev:mobile` | Start only the mobile app |
+| `bun run dev:backend` | Start only the backend |
+| `bun run dev:tunnel` | Start only the tunnel task |
 | `bun run build` | Build all apps |
-| `bun run format-and-lint` | Check formatting and linting with Biome |
-| `bun run format-and-lint:fix` | Auto-fix formatting and linting issues |
+| `bun run format-and-lint` | Run Biome checks |
+| `bun run format-and-lint:fix` | Auto-fix Biome issues |
 | `bun run check-types` | Type-check all packages |
+
+## Carry-Over Analysis
+
+Changes ported from the sibling `educanto` repo are documented in:
+
+- `docs/AUTH_PORTING_NOTES.md`
+
+That file explains what was carried over to the template, what was intentionally left out, and why.
 
 ## Customization
 
-1. **Rename the project:** Update `name` fields in root `package.json` and all `packages/*/package.json` and `apps/*/package.json`
-2. **Add your schema:** Define your database tables in `packages/backend/convex/schema.ts`
-3. **Add backend functions:** Create new files in `packages/backend/convex/` for your queries, mutations, and actions
-4. **Add web routes:** Create new route files in `apps/web/src/routes/`
-5. **Add mobile screens:** Create new screen files in `apps/mobile/app/`
-6. **Update trusted origins:** Add your production URLs to the `trustedOrigins` array in `packages/backend/convex/auth.ts`
-7. **Update mobile scheme:** Change the `scheme` in `apps/mobile/app.json` to your app's URL scheme
+1. Rename package names in all `package.json` files.
+2. Add your schema in `packages/backend/convex/schema.ts`.
+3. Add Convex functions in `packages/backend/convex/`.
+4. Add web routes in `apps/web/src/routes/`.
+5. Add mobile screens in `apps/mobile/app/`.
+6. Update trusted origins via Convex runtime env (`SITE_URL`, `TRUSTED_ORIGINS`).
+7. Update Expo app scheme in `apps/mobile/app.json` and `MOBILE_APP_SCHEME`.

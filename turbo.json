@@ -1,6 +1,5 @@
 {
 	"$schema": "https://turborepo.dev/schema.json",
-	"ui": "tui",
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
@@ -14,7 +13,8 @@
 		},
 		"dev": {
 			"cache": false,
-			"persistent": true
+			"persistent": true,
+			"env": ["NODE_ENV", "CLOUDFLARE_*", "MONOREPO_AUTH_URL"]
 		}
 	}
 }

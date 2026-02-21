@@ -1,7 +1,5 @@
 import { convexBetterAuthReactStart } from "@convex-dev/better-auth/react-start";
 
-console.log(process.env);
-
 export const {
 	handler,
 	getToken,

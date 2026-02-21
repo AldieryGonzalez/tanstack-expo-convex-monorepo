@@ -1,6 +1,6 @@
 import { expo } from "@better-auth/expo";
 import { createClient } from "@convex-dev/better-auth";
-import { convex } from "@convex-dev/better-auth/plugins";
+import { convex, crossDomain } from "@convex-dev/better-auth/plugins";
 import type { GenericCtx } from "@convex-dev/better-auth/utils";
 import { betterAuth } from "better-auth/minimal";
 import { anonymous, magicLink, twoFactor } from "better-auth/plugins";
@@ -10,12 +10,40 @@ import { type QueryCtx, query } from "./_generated/server";
 import authConfig from "./auth.config";
 
 const betterAuthSecret = process.env.BETTER_AUTH_SECRET as string;
-const baseSiteUrl =
-	(process.env.SITE_URL as string) || (process.env.CONVEX_SITE_URL as string);
+const baseSiteUrl = (process.env.SITE_URL || process.env.CONVEX_SITE_URL) as
+	| string
+	| undefined;
+
+if (!baseSiteUrl) {
+	throw new Error(
+		"Missing auth site URL: set SITE_URL (or fallback CONVEX_SITE_URL).",
+	);
+}
+
 const siteUrl =
 	!baseSiteUrl.startsWith("http://") && !baseSiteUrl.startsWith("https://")
 		? `http://${baseSiteUrl}`
 		: baseSiteUrl;
+const siteOrigin = new URL(siteUrl).origin;
+const isDevelopment =
+	process.env.NODE_ENV !== "production" || !siteUrl.includes(".convex.site");
+const additionalTrustedOrigins = (process.env.TRUSTED_ORIGINS ?? "")
+	.split(",")
+	.map((origin) => origin.trim())
+	.filter(Boolean);
+const mobileScheme =
+	(process.env.MOBILE_APP_SCHEME ?? "myapp").replace("://", "").trim() ||
+	"myapp";
+const mobileTrustedOrigins = isDevelopment
+	? [
+			"exp://",
+			"exp://**",
+			"exp://192.168.*.*:*/**",
+			"exp://10.0.*.*:*/**",
+			"exp://172.*.*.*:*/**",
+			"exp://*.local:*/**",
+		]
+	: [`${mobileScheme}://`, `${mobileScheme}://**`];
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
@@ -25,15 +53,14 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
 	betterAuth({
 		baseURL: siteUrl,
 		secret: betterAuthSecret,
-		trustedOrigins: [
-			"http://localhost:3000",
-			// Add your production URLs here:
-			// "https://yourdomain.com",
-			// "myapp://",
-			...(process.env.NODE_ENV === "development"
-				? ["exp://", "exp://**", "exp://192.168.*.*:*/**"]
-				: []),
-		],
+		trustedOrigins: Array.from(
+			new Set([
+				"http://localhost:3000",
+				siteOrigin,
+				...additionalTrustedOrigins,
+				...mobileTrustedOrigins,
+			]),
+		),
 
 		database: authComponent.adapter(ctx),
 		account: {
@@ -54,6 +81,9 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
 		},
 		plugins: [
 			expo(),
+			crossDomain({
+				siteUrl,
+			}),
 			magicLink({
 				sendMagicLink: async ({ email, url }) => {
 					// TODO: Plug in your email service (e.g. Resend, SendGrid, etc.)
